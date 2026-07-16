@@ -54,7 +54,7 @@ const WritePage: React.FC = () => {
       drawAllStrokeOutlines(
         ctx, sd.strokes,
         { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 },
-        true, 'rgba(0, 0, 0, 0.1)',
+        false, 'rgba(0, 0, 0, 0.1)',
       );
     }
   }, [currentChar]);
@@ -113,7 +113,7 @@ const WritePage: React.FC = () => {
         drawAllStrokeOutlines(
           ctx, sd.strokes,
           { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 },
-          true, 'rgba(0, 0, 0, 0.1)',
+          false, 'rgba(0, 0, 0, 0.1)',
         );
       };
     }

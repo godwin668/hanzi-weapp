@@ -48,7 +48,7 @@ const TracePage: React.FC = () => {
       drawAllStrokeOutlines(
         ctx, sd.strokes,
         { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
-        true, 'rgba(71, 184, 129, 0.1)',
+        false, 'rgba(71, 184, 129, 0.1)',
       );
     }
   }, [currentChar]);
@@ -96,7 +96,7 @@ const TracePage: React.FC = () => {
     drawAllStrokeOutlines(
       ctx, sd.strokes,
       { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
-      true, 'rgba(71, 184, 129, 0.07)',
+      false, 'rgba(71, 184, 129, 0.07)',
     );
 
     const renderer = new StrokeAnimationRenderer(ctx, sd.medians, {
@@ -108,7 +108,7 @@ const TracePage: React.FC = () => {
       drawAllStrokeOutlines(
         ctx, sd.strokes,
         { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
-        true, 'rgba(71, 184, 129, 0.07)',
+        false, 'rgba(71, 184, 129, 0.07)',
       );
     };
     renderer.setColors('rgba(71, 184, 129, 0.35)', 'rgba(255, 74, 74, 0.85)');

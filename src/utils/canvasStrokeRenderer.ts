@@ -176,14 +176,14 @@ function drawSvgPath(
  * 绘制单笔画的楷体轮廓（填充模式）
  * @param strokes - strokeData.strokes 数组
  * @param strokeIndex - 笔画索引
- * @param flipY - 是否翻转 Y 轴
+ * @param flipY - 是否翻转 Y 轴（默认 false，toCanvas 已处理坐标转换）
  */
 export function drawStrokeOutline(
   ctx: any,
   strokes: string[],
   strokeIndex: number,
   config: Required<RenderConfig>,
-  flipY: boolean = true,
+  flipY: boolean = false,
   fillColor: string = 'rgba(71, 184, 129, 0.12)',
 ) {
   if (strokeIndex < 0 || strokeIndex >= strokes.length) return;
@@ -193,13 +193,13 @@ export function drawStrokeOutline(
 /**
  * 绘制所有笔画的楷体轮廓（填充模式）
  * @param strokes - strokeData.strokes 数组
- * @param flipY - 是否翻转 Y 轴
+ * @param flipY - 是否翻转 Y 轴（默认 false，toCanvas 已处理坐标转换）
  */
 export function drawAllStrokeOutlines(
   ctx: any,
   strokes: string[],
   config: Required<RenderConfig>,
-  flipY: boolean = true,
+  flipY: boolean = false,
   fillColor: string = 'rgba(71, 184, 129, 0.12)',
 ) {
   for (const pathStr of strokes) {
