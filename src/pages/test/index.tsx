@@ -7,7 +7,7 @@ import { callFunction } from '@/services/cloud';
 import { TestRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
 import { drawGrid } from '@/utils/canvasStrokeRenderer';
-import { calculateScore } from '@/utils/strokeScoring';
+import { evaluateCharacterScore } from '@/utils/strokeScoring';
 import { useCanvasCore } from '@/hooks/useCanvasCore';
 import styles from './index.module.scss';
 
@@ -69,14 +69,7 @@ const TestPage: React.FC = () => {
 
   const handleNextChar = () => {
     const sd = getStrokeData(currentChar?.char || '');
-    let score: number;
-
-    if (sd && userStrokes.length > 0) {
-      const result = calculateScore(userStrokes, sd.medians);
-      score = result.score;
-    } else {
-      score = userStrokes.length > 0 ? 50 : 10;
-    }
+    const { score } = evaluateCharacterScore(userStrokes, sd?.medians);
 
     const newScores = [...scores];
     newScores[charIndex] = score;
@@ -92,13 +85,7 @@ const TestPage: React.FC = () => {
     clearInterval(timerRef.current);
 
     const sd = getStrokeData(currentChar?.char || '');
-    let lastScore: number;
-    if (sd && userStrokes.length > 0) {
-      const result = calculateScore(userStrokes, sd.medians);
-      lastScore = result.score;
-    } else {
-      lastScore = userStrokes.length > 0 ? 50 : 10;
-    }
+    const { score: lastScore } = evaluateCharacterScore(userStrokes, sd?.medians);
 
     const finalScores = [...scores];
     finalScores[charIndex] = lastScore;

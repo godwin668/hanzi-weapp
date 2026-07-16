@@ -6,7 +6,7 @@ import { callFunction } from '@/services/cloud';
 import { PracticeRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
 import { StrokeAnimationRenderer, drawGrid, drawAllStrokeOutlines } from '@/utils/canvasStrokeRenderer';
-import { calculateScore } from '@/utils/strokeScoring';
+import { evaluateCharacterScore } from '@/utils/strokeScoring';
 import { useCanvasCore } from '@/hooks/useCanvasCore';
 import styles from './index.module.scss';
 
@@ -191,18 +191,10 @@ const WritePage: React.FC = () => {
     animRendererRef.current?.destroy();
 
     const sd = getStrokeData(currentChar?.char || '');
-    let score: number, accuracy: number;
-
-    if (sd && userStrokes.length > 0) {
-      const result = calculateScore(userStrokes, sd.medians);
-      score = result.score;
-      accuracy = result.accuracy;
-    } else {
-      score = userStrokes.length > 0 ? 50 : 10;
-      accuracy = score;
-    }
-
-    const aesthetics = Math.round(accuracy * 0.9 + 5);
+    const { score, accuracy, aesthetics } = evaluateCharacterScore(
+      userStrokes,
+      sd?.medians
+    );
 
     useAppStore.getState().setLastSessionData({
       char: currentChar?.char || '',

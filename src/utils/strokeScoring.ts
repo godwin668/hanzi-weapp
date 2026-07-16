@@ -169,3 +169,59 @@ export function calculateScore(
 
   return { score, accuracy, strokeMatch: Math.round(strokeMatch * 100) };
 }
+
+/**
+ * 评分配置选项
+ */
+export interface ScoreConfig {
+  defaultScoreWithStrokes: number;
+  defaultScoreNoStrokes: number;
+}
+
+/**
+ * 默认评分配置
+ */
+export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
+  defaultScoreWithStrokes: 50,
+  defaultScoreNoStrokes: 10,
+};
+
+/**
+ * 统一评分函数：计算用户书写字符的得分
+ * @param userStrokes 用户书写的笔画路径
+ * @param refMedians 标准笔画的 medians 数据（可为 undefined 表示无标准数据）
+ * @param config 可选的评分配置（默认使用 DEFAULT_SCORE_CONFIG）
+ * @returns 评分结果，包含分数、准确度、美观度、笔画匹配度
+ */
+export function evaluateCharacterScore(
+  userStrokes: string[][],
+  refMedians: number[][][] | undefined,
+  config: ScoreConfig = DEFAULT_SCORE_CONFIG
+): {
+  score: number;
+  accuracy: number;
+  aesthetics: number;
+  strokeMatch: number;
+} {
+  if (refMedians && userStrokes.length > 0) {
+    const result = calculateScore(userStrokes, refMedians);
+    const aesthetics = Math.round(result.accuracy * 0.9 + 5);
+    
+    return {
+      score: result.score,
+      accuracy: result.accuracy,
+      aesthetics,
+      strokeMatch: result.strokeMatch,
+    };
+  }
+
+  const hasStrokes = userStrokes.length > 0;
+  const score = hasStrokes ? config.defaultScoreWithStrokes : config.defaultScoreNoStrokes;
+  
+  return {
+    score,
+    accuracy: score,
+    aesthetics: Math.round(score * 0.9 + 5),
+    strokeMatch: 0,
+  };
+}
