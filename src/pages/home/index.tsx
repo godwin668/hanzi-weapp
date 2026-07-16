@@ -9,7 +9,7 @@ import GradeSelector from '@/components/GradeSelector';
 import styles from './index.module.scss';
 
 const HomePage: React.FC = () => {
-  const { currentGrade, setCurrentGrade, userProfile } = useAppStore();
+  const { currentGrade, setCurrentGrade } = useAppStore();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [dailyChars, setDailyChars] = useState<{ char: string; pinyin: string }[]>([]);
 
@@ -43,6 +43,11 @@ const HomePage: React.FC = () => {
 
   const goToTest = () => {
     Taro.navigateTo({ url: '/pages/test/index' });
+  };
+
+  const handleDailyCharClick = (char: { char: string; pinyin: string }) => {
+    useAppStore.getState().setSelectedCharacters([char as any]);
+    Taro.navigateTo({ url: '/pages/write/index' });
   };
 
   return (
@@ -106,7 +111,7 @@ const HomePage: React.FC = () => {
           <Text className={styles.sectionTitle}>今日推荐</Text>
           <View className={styles.dailyChars}>
             {dailyChars.map((c) => (
-              <View key={c.char} className={styles.dailyChar}>
+              <View key={c.char} className={styles.dailyChar} onClick={() => handleDailyCharClick(c)}>
                 <Text className={styles.dailyCharText}>{c.char}</Text>
                 <Text className={styles.dailyCharPinyin}>{c.pinyin}</Text>
               </View>

@@ -89,6 +89,7 @@
 
 .charSection {
   padding: $spacing-md $page-padding;
+  padding-bottom: calc($button-height-md + $spacing-lg + env(safe-area-inset-bottom));
 }
 
 .sectionHeader {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { View, Text } from '@tarojs/components';
+import Taro from '@tarojs/taro';
 import classnames from 'classnames';
+import { useAppStore } from '@/store/useAppStore';
 import { callFunction } from '@/services/cloud';
 import { PracticeRecord, TestRecord, StatsData } from '@/types';
 import styles from './index.module.scss';
@@ -59,6 +61,31 @@ const HistoryPage: React.FC = () => {
   };
 
   const maxCount = Math.max(...(stats?.weeklyData.map((d) => d.count) || [1]), 1);
+
+  const handlePracticeRecordClick = (r: PracticeRecord) => {
+    useAppStore.getState().setHistoryResultData({
+      char: r.character,
+      score: r.score,
+      accuracy: r.accuracy,
+      aesthetics: r.aesthetics,
+      isTest: false,
+    });
+    Taro.navigateTo({
+      url: `/pages/result/index?score=${r.score}&accuracy=${r.accuracy}&aesthetics=${r.aesthetics || 0}&char=${r.character}&fromHistory=1`,
+    });
+  };
+
+  const handleTestRecordClick = (r: TestRecord) => {
+    useAppStore.getState().setHistoryResultData({
+      char: r.characters.join(''),
+      score: r.avgAccuracy,
+      accuracy: r.avgAccuracy,
+      isTest: true,
+    });
+    Taro.navigateTo({
+      url: `/pages/result/index?score=${r.avgAccuracy}&accuracy=${r.avgAccuracy}&aesthetics=${r.avgAccuracy}&char=${r.characters.join('')}&isTest=1&fromHistory=1`,
+    });
+  };
 
   return (
     <View className={styles.page}>
@@ -127,7 +154,7 @@ const HistoryPage: React.FC = () => {
             </View>
           ) : (
             practiceRecords.map((r) => (
-              <View key={r._id} className={styles.recordCard}>
+              <View key={r._id} className={styles.recordCard} onClick={() => handlePracticeRecordClick(r)}>
                 <View className={styles.recordLeft}>
                   <View className={styles.recordChar}>
                     <Text>{r.character}</Text>
@@ -154,7 +181,7 @@ const HistoryPage: React.FC = () => {
             </View>
           ) : (
             testRecords.map((r) => (
-              <View key={r._id} className={styles.recordCard}>
+              <View key={r._id} className={styles.recordCard} onClick={() => handleTestRecordClick(r)}>
                 <View className={styles.recordLeft}>
                   <View className={styles.recordChar}>
                     <Text>{r.characters[0]}</Text>

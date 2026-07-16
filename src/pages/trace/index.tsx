@@ -7,30 +7,53 @@ import { PracticeRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
 import { StrokeAnimationRenderer, drawGrid, drawAllStrokeOutlines } from '@/utils/canvasStrokeRenderer';
 import { calculateScore } from '@/utils/strokeScoring';
-import { createBrushState, calcBrushWidth, resetBrushState } from '@/utils/pressureBrush';
+import { useCanvasCore } from '@/hooks/useCanvasCore';
 import styles from './index.module.scss';
 
 const TracePage: React.FC = () => {
-  const { selectedCharacters, currentCharIndex, setCurrentCharIndex, nextChar, prevChar } = useAppStore();
+  const { selectedCharacters, currentCharIndex, nextChar, prevChar } = useAppStore();
   const [showHint, setShowHint] = useState(false);
   const [animCurrentStroke, setAnimCurrentStroke] = useState(0);
-  const [userStrokes, setUserStrokes] = useState<string[][]>([]);
-  const canvasRef = useRef<any>(null);
-  const ctxRef = useRef<any>(null);
-  const canvasRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
-  const logicalSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
-  const currentStrokeRef = useRef<string[]>([]);
   const animRendererRef = useRef<StrokeAnimationRenderer | null>(null);
-  const isDrawingRef = useRef(false);
   const showHintRef = useRef(false);
-  const brushRef = useRef(createBrushState());
-
-  // 同步 showHint 到 ref
-  useEffect(() => {
-    showHintRef.current = showHint;
-  }, [showHint]);
 
   const currentChar = selectedCharacters[currentCharIndex];
+
+  const {
+    ctxRef,
+    logicalSizeRef,
+    userStrokes,
+    setUserStrokes,
+    initCanvas,
+    clearCanvas,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+  } = useCanvasCore({
+    canvasId: '#traceCanvas',
+    disabled: showHint,
+    strokeColor: '#FFB347',
+  });
+
+  useEffect(() => { showHintRef.current = showHint; }, [showHint]);
+
+  const strokeData = getStrokeData(currentChar?.char || '');
+  const totalStrokes = strokeData?.medians.length || currentChar?.strokes;
+
+  // ========== 绘制描红底字 ==========
+
+  const drawBaseOutline = useCallback((ctx: any, w: number, h: number) => {
+    const sd = getStrokeData(currentChar?.char || '');
+    if (sd) {
+      drawAllStrokeOutlines(
+        ctx, sd.strokes,
+        { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
+        true, 'rgba(71, 184, 129, 0.1)',
+      );
+    }
+  }, [currentChar]);
+
+  // ========== Canvas 初始化 ==========
 
   useEffect(() => {
     if (!currentChar) {
@@ -38,122 +61,20 @@ const TracePage: React.FC = () => {
       Taro.navigateBack();
       return;
     }
-    initCanvas();
+    setUserStrokes([]);
     setShowHint(false);
     setAnimCurrentStroke(0);
-    setUserStrokes([]);
+    initCanvas((ctx, w, h) => {
+      drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
+      drawBaseOutline(ctx, w, h);
+    });
     return () => {
       animRendererRef.current?.destroy();
     };
   }, [currentCharIndex]);
 
-  const initCanvas = (retryCount = 0) => {
-    const MAX_RETRY = 5;
-    setTimeout(() => {
-      const query = Taro.createSelectorQuery();
-      query.select('#traceCanvas')
-        .fields({ node: true, size: true, rect: true })
-        .exec((res) => {
-          console.log('[TracePage] Query result:', JSON.stringify(res));
-          if (res[0] && res[0].node) {
-            const canvas = res[0].node;
-            const ctx = canvas.getContext('2d');
-            const dpr = Taro.getSystemInfoSync().pixelRatio;
-            canvas.width = res[0].width * dpr;
-            canvas.height = res[0].height * dpr;
-            ctx.scale(dpr, dpr);
+  // ========== 笔顺动画 ==========
 
-            const lw = res[0].width;
-            const lh = res[0].height;
-            console.log('[TracePage] Canvas size:', lw, 'x', lh, 'dpr:', dpr);
-            logicalSizeRef.current = { w: lw, h: lh };
-            canvasRectRef.current = { left: res[0].left, top: res[0].top, width: lw, height: lh };
-
-            // 绘制米字格
-            drawGrid(ctx, { canvasWidth: lw, canvasHeight: lh, margin: 30, gridSize: 1024 });
-
-            // 绘制描红底字（基于 strokes 楷体轮廓）
-            const strokeData = getStrokeData(currentChar?.char || '');
-            if (strokeData) {
-              drawAllStrokeOutlines(
-                ctx, strokeData.strokes,
-                { canvasWidth: lw, canvasHeight: lh, margin: 30, gridSize: 1024 },
-                true,
-                'rgba(71, 184, 129, 0.1)',
-              );
-            }
-
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = '#FFB347';
-            ctxRef.current = ctx;
-            canvasRef.current = canvas;
-            console.log('[TracePage] Canvas initialized successfully, ctxRef set:', !!ctxRef.current);
-          } else if (retryCount < MAX_RETRY) {
-            console.warn(`[TracePage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
-            initCanvas(retryCount + 1);
-          } else {
-            console.error('[TracePage] Canvas init failed after retries, res:', JSON.stringify(res));
-            Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
-          }
-        });
-    }, 100 + retryCount * 150);
-  };
-
-  const getCanvasPos = (touch: any) => {
-    // 兼容不同事件格式：直接属性 或 detail
-    const x = touch.x ?? touch.clientX ?? 0;
-    const y = touch.y ?? touch.clientY ?? 0;
-    return { x, y };
-  };
-
-  const handleTouchStart = useCallback((e: any) => {
-    if (showHintRef.current || !ctxRef.current) return;
-    const touch = e.touches[0];
-    const pos = getCanvasPos(touch);
-    isDrawingRef.current = true;
-    currentStrokeRef.current = [];
-    currentStrokeRef.current.push(`${pos.x},${pos.y}`);
-    resetBrushState(brushRef.current);
-    ctxRef.current.lineWidth = brushRef.current.currentWidth;
-    ctxRef.current.beginPath();
-    ctxRef.current.moveTo(pos.x, pos.y);
-  }, []);
-
-  const handleTouchMove = useCallback((e: any) => {
-    if (!isDrawingRef.current || !ctxRef.current) return;
-    const touch = e.touches[0];
-    const pos = getCanvasPos(touch);
-    currentStrokeRef.current.push(`${pos.x},${pos.y}`);
-    const { width } = calcBrushWidth(brushRef.current, pos);
-    ctxRef.current.lineWidth = width;
-    ctxRef.current.lineTo(pos.x, pos.y);
-    ctxRef.current.stroke();
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (!isDrawingRef.current) return;
-    isDrawingRef.current = false;
-    ctxRef.current?.closePath();
-    if (currentStrokeRef.current.length > 1) {
-      setUserStrokes(prev => [...prev, [...currentStrokeRef.current]]);
-    }
-    currentStrokeRef.current = [];
-  }, []);
-
-  const handleClear = () => {
-    if (!ctxRef.current) return;
-    const { w, h } = logicalSizeRef.current;
-    ctxRef.current.clearRect(0, 0, w, h);
-    setUserStrokes([]);
-    setAnimCurrentStroke(0);
-    animRendererRef.current?.destroy();
-    animRendererRef.current = null;
-    initCanvas();
-  };
-
-  // 笔顺动画
   const startAnimation = useCallback(() => {
     if (!currentChar) return;
     if (!ctxRef.current) {
@@ -161,8 +82,8 @@ const TracePage: React.FC = () => {
       return;
     }
 
-    const strokeData = getStrokeData(currentChar.char);
-    if (!strokeData || strokeData.medians.length === 0) {
+    const sd = getStrokeData(currentChar.char);
+    if (!sd || sd.medians.length === 0) {
       Taro.showToast({ title: '暂无该字笔顺数据', icon: 'none' });
       return;
     }
@@ -170,47 +91,49 @@ const TracePage: React.FC = () => {
     const { w, h } = logicalSizeRef.current;
     const ctx = ctxRef.current;
 
-    // 清除并重绘底字
     ctx.clearRect(0, 0, w, h);
     drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
-
-    // 淡色底字（楷体轮廓）
     drawAllStrokeOutlines(
-      ctx, strokeData.strokes,
+      ctx, sd.strokes,
       { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
-      true,
-      'rgba(71, 184, 129, 0.07)',
+      true, 'rgba(71, 184, 129, 0.07)',
     );
 
-    const renderer = new StrokeAnimationRenderer(ctx, strokeData.medians, {
-      canvasWidth: w,
-      canvasHeight: h,
-      margin: 30,
+    const renderer = new StrokeAnimationRenderer(ctx, sd.medians, {
+      canvasWidth: w, canvasHeight: h, margin: 30,
     });
-    // 覆盖 drawBackground 以保留底字
     renderer.drawBackground = () => {
       ctx.clearRect(0, 0, w, h);
       drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
-      // 重绘底字（楷体轮廓）
       drawAllStrokeOutlines(
-        ctx, strokeData.strokes,
+        ctx, sd.strokes,
         { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
-        true,
-        'rgba(71, 184, 129, 0.07)',
+        true, 'rgba(71, 184, 129, 0.07)',
       );
     };
-
     renderer.setColors('rgba(71, 184, 129, 0.35)', 'rgba(255, 74, 74, 0.85)');
     renderer.onAnimationFrame((state) => {
       setAnimCurrentStroke(state.currentStrokeIndex + 1);
     });
     renderer.onAnimationComplete(() => {
-      setAnimCurrentStroke(strokeData.medians.length);
+      setAnimCurrentStroke(sd.medians.length);
     });
 
     animRendererRef.current = renderer;
     renderer.start(60);
-  }, [currentChar]);
+  }, [currentChar, ctxRef, logicalSizeRef]);
+
+  // ========== 操作 ==========
+
+  const handleClear = () => {
+    clearCanvas((ctx, w, h) => {
+      drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
+      drawBaseOutline(ctx, w, h);
+    });
+    setAnimCurrentStroke(0);
+    animRendererRef.current?.destroy();
+    animRendererRef.current = null;
+  };
 
   const handleToggleHint = () => {
     if (showHint) {
@@ -229,11 +152,11 @@ const TracePage: React.FC = () => {
   const handleSubmit = async () => {
     animRendererRef.current?.destroy();
 
-    const strokeData = getStrokeData(currentChar?.char || '');
+    const sd = getStrokeData(currentChar?.char || '');
     let score: number, accuracy: number;
 
-    if (strokeData && userStrokes.length > 0) {
-      const result = calculateScore(userStrokes, strokeData.medians);
+    if (sd && userStrokes.length > 0) {
+      const result = calculateScore(userStrokes, sd.medians);
       score = result.score;
       accuracy = result.accuracy;
     } else {
@@ -243,7 +166,6 @@ const TracePage: React.FC = () => {
 
     const aesthetics = Math.round(accuracy * 0.9 + 5);
 
-    // 保存笔迹数据用于结果页对比展示
     useAppStore.getState().setLastSessionData({
       char: currentChar?.char || '',
       userStrokes: [...userStrokes],
@@ -254,22 +176,18 @@ const TracePage: React.FC = () => {
         character: currentChar?.char || '',
         mode: 'trace',
         strokes: userStrokes,
-        score,
-        accuracy,
-        aesthetics,
+        score, accuracy, aesthetics,
         duration: 35,
       });
-      Taro.navigateTo({ url: `/pages/result/index?score=${score}&accuracy=${accuracy}&aesthetics=${aesthetics}&char=${currentChar?.char}` });
     } catch (err) {
       console.error('[TracePage] submit error:', err);
-      Taro.navigateTo({ url: `/pages/result/index?score=${score}&accuracy=${accuracy}&aesthetics=${aesthetics}&char=${currentChar?.char}` });
     }
+    Taro.navigateTo({
+      url: `/pages/result/index?score=${score}&accuracy=${accuracy}&aesthetics=${aesthetics}&char=${currentChar?.char}`,
+    });
   };
 
   if (!currentChar) return null;
-
-  const strokeData = getStrokeData(currentChar.char);
-  const totalStrokes = strokeData?.medians.length || currentChar.strokes;
 
   return (
     <View className={styles.page}>
@@ -287,12 +205,12 @@ const TracePage: React.FC = () => {
           <View className={styles.prevNext}>
             {currentCharIndex > 0 && (
               <View className={styles.navBtn} onClick={prevChar}>
-                <Text>‹</Text>
+                <Text>{'<'}</Text>
               </View>
             )}
             {currentCharIndex < selectedCharacters.length - 1 && (
               <View className={styles.navBtn} onClick={nextChar}>
-                <Text>›</Text>
+                <Text>{'>'}</Text>
               </View>
             )}
           </View>

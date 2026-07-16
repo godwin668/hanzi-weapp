@@ -38,6 +38,16 @@ interface AppState {
   // 最近一次书写的笔迹数据（用于结果页对比展示）
   lastSessionData: { char: string; userStrokes: string[][] } | null;
   setLastSessionData: (data: { char: string; userStrokes: string[][] } | null) => void;
+
+  // 从历史记录进入结果页的数据（无笔迹数据时使用）
+  historyResultData: {
+    char: string;
+    score: number;
+    accuracy: number;
+    aesthetics?: number;
+    isTest?: boolean;
+  } | null;
+  setHistoryResultData: (data: AppState['historyResultData']) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -88,4 +98,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   lastSessionData: null,
   setLastSessionData: (data) => set({ lastSessionData: data }),
+
+  historyResultData: null,
+  setHistoryResultData: (data) => set({ historyResultData: data }),
 }));

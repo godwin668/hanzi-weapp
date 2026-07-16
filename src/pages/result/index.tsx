@@ -9,12 +9,16 @@ import styles from './index.module.scss';
 
 const ResultPage: React.FC = () => {
   const router = useRouter();
-  const { score = '0', accuracy = '0', aesthetics = '0', char = '', isTest = '0' } = router.params;
+  const {
+    score = '0', accuracy = '0', aesthetics = '0',
+    char = '', isTest = '0', fromHistory = '0',
+  } = router.params;
   const lastSessionData = useAppStore(s => s.lastSessionData);
 
   const scoreNum = parseInt(score as string, 10) || 0;
   const accuracyNum = parseInt(accuracy as string, 10) || 0;
   const aestheticsNum = parseInt(aesthetics as string, 10) || 0;
+  const isFromHistory = fromHistory === '1';
 
   // Canvas refs
   const userCanvasRef = useRef<any>(null);
@@ -257,43 +261,52 @@ const ResultPage: React.FC = () => {
 
       <View className={styles.compareSection}>
         <Text className={styles.detailTitle}>标准对比</Text>
-        <View className={styles.compareGrid}>
-          <View className={styles.compareItem}>
-            <View className={classnames(styles.compareChar, styles.yourChar)}>
-              {userCanvasReady ? (
-                <Canvas
-                  id="userStrokeCanvas"
-                  type="2d"
-                  className={styles.compareCanvas}
-                />
-              ) : (
-                <Text className={styles.compareFallback}>{char || lastSessionData?.char || '?'}</Text>
-              )}
+        {isFromHistory ? (
+          <View className={styles.noStrokeHint}>
+            <Text className={styles.noStrokeText}>历史记录暂不支持笔迹回放</Text>
+            <Text className={styles.noStrokeSub}>完成书写后立即查看可对比笔迹</Text>
+          </View>
+        ) : (
+          <>
+            <View className={styles.compareGrid}>
+              <View className={styles.compareItem}>
+                <View className={classnames(styles.compareChar, styles.yourChar)}>
+                  {userCanvasReady ? (
+                    <Canvas
+                      id="userStrokeCanvas"
+                      type="2d"
+                      className={styles.compareCanvas}
+                    />
+                  ) : (
+                    <Text className={styles.compareFallback}>{char || lastSessionData?.char || '?'}</Text>
+                  )}
+                </View>
+                <Text className={styles.compareLabel}>你的书写</Text>
+              </View>
+              <View className={styles.compareItem}>
+                <View className={classnames(styles.compareChar, styles.standardChar)}>
+                  {stdCanvasReady ? (
+                    <Canvas
+                      id="stdStrokeCanvas"
+                      type="2d"
+                      className={styles.compareCanvas}
+                    />
+                  ) : (
+                    <Text className={styles.compareFallback}>{char || lastSessionData?.char || '?'}</Text>
+                  )}
+                </View>
+                <Text className={styles.compareLabel}>标准字帖</Text>
+              </View>
             </View>
-            <Text className={styles.compareLabel}>你的书写</Text>
-          </View>
-          <View className={styles.compareItem}>
-            <View className={classnames(styles.compareChar, styles.standardChar)}>
-              {stdCanvasReady ? (
-                <Canvas
-                  id="stdStrokeCanvas"
-                  type="2d"
-                  className={styles.compareCanvas}
-                />
-              ) : (
-                <Text className={styles.compareFallback}>{char || lastSessionData?.char || '?'}</Text>
-              )}
-            </View>
-            <Text className={styles.compareLabel}>标准字帖</Text>
-          </View>
-        </View>
-        {improvementTips.length > 0 && (
-          <View className={styles.improvement}>
-            <Text className={styles.improvementTitle}>改进建议</Text>
-            {improvementTips.map((tip, i) => (
-              <Text key={i} className={styles.improvementTip}>{i + 1}. {tip}</Text>
-            ))}
-          </View>
+            {improvementTips.length > 0 && (
+              <View className={styles.improvement}>
+                <Text className={styles.improvementTitle}>改进建议</Text>
+                {improvementTips.map((tip, i) => (
+                  <Text key={i} className={styles.improvementTip}>{i + 1}. {tip}</Text>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </View>
 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button } from '@tarojs/components';
+import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useAppStore } from '@/store/useAppStore';
 import { callFunction } from '@/services/cloud';
 import { UserProfile, GradeLevel, StatsData } from '@/types';
+import GradeSelector from '@/components/GradeSelector';
 import styles from './index.module.scss';
 
 const MinePage: React.FC = () => {
@@ -101,12 +102,12 @@ const MinePage: React.FC = () => {
 
         <View className={styles.section}>
           <Text className={styles.sectionTitle}>设置</Text>
-          <View className={styles.menuItem}>
-            <View className={styles.menuLeft}>
+          <View className={styles.menuItem} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <View className={styles.menuLeft} style={{ marginBottom: '16rpx' }}>
               <Text className={styles.menuIcon}>📚</Text>
               <Text className={styles.menuLabel}>当前年级</Text>
             </View>
-            <Text className={styles.menuValue}>{gradeLabels[currentGrade]}</Text>
+            <GradeSelector currentGrade={currentGrade} onSelect={setCurrentGrade} />
           </View>
           <View className={styles.menuItem}>
             <View className={styles.menuLeft}>
