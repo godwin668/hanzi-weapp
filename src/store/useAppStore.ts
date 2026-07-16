@@ -34,6 +34,10 @@ interface AppState {
   // 自定义字数
   customCount: number;
   setCustomCount: (count: number) => void;
+
+  // 最近一次书写的笔迹数据（用于结果页对比展示）
+  lastSessionData: { char: string; userStrokes: string[][] } | null;
+  setLastSessionData: (data: { char: string; userStrokes: string[][] } | null) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -81,4 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   customCount: 5,
   setCustomCount: (count) => set({ customCount: count }),
+
+  lastSessionData: null,
+  setLastSessionData: (data) => set({ lastSessionData: data }),
 }));

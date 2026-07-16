@@ -95,9 +95,10 @@ function normalizePoints(points: string[]): [number, number][] {
 
 /**
  * 归一化标准 medians 到 0-1 范围
+ * Y 轴翻转：SVG 坐标系 (Y=900 顶部) → Canvas 屏幕坐标系 (Y=0 顶部)
  */
 function normalizeMedians(medians: number[][]): [number, number][] {
-  return medians.map(([x, y]) => [x / 1024, y / 1024]);
+  return medians.map(([x, y]) => [x / 1024, (900 - y) / 1024]);
 }
 
 /**

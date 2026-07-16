@@ -24,7 +24,11 @@ const DEFAULT_CONFIG: Required<RenderConfig> = {
   lineJoin: 'round',
 };
 
-/** 将 1024 网格坐标转换为 Canvas 坐标 */
+/**
+ * 将 1024 网格坐标转换为 Canvas 坐标
+ * Make Me a Hanzi 数据使用 SVG 坐标系：Y 轴向下递减（Y=900 顶部, Y=-124 底部）
+ * 需要翻转 Y 轴以匹配 Canvas 屏幕坐标系（Y 轴向下递增）
+ */
 function toCanvas(
   rx: number, ry: number,
   config: Required<RenderConfig>
@@ -32,9 +36,11 @@ function toCanvas(
   const { margin, canvasWidth, canvasHeight, gridSize } = config;
   const drawW = canvasWidth - margin * 2;
   const drawH = canvasHeight - margin * 2;
+  // SVG 坐标系范围：Y 从 900（顶部）到 -124（底部），跨度为 1024
+  // 翻转公式：normalizedY = (900 - ry) / 1024，映射到 [0, 1]
   return {
     x: margin + (rx / gridSize) * drawW,
-    y: margin + (ry / gridSize) * drawH,
+    y: margin + ((900 - ry) / gridSize) * drawH,
   };
 }
 
@@ -102,6 +108,102 @@ export function drawAllStrokes(
 ) {
   for (const medians of allMedians) {
     drawStroke(ctx, medians, config, color, lineWidth);
+  }
+}
+
+// ========== SVG 路径渲染（用于楷体笔画轮廓） ==========
+
+/**
+ * 解析 hanzi-writer-data 的 SVG path 并在 Canvas 上绘制
+ * 支持命令: M(oveTo), Q(uadraticCurveTo), Z(closePath)
+ * 坐标基于 1024x1024 网格，自动缩放
+ * @param flipY - 是否翻转 Y 轴（SVG 坐标系 Y 向下 → Canvas 屏幕坐标系 Y 向下时需翻转）
+ */
+function drawSvgPath(
+  ctx: any,
+  pathStr: string,
+  config: Required<RenderConfig>,
+  flipY: boolean,
+  fillColor?: string,
+  strokeColor?: string,
+  strokeWidth?: number,
+) {
+  const commands = pathStr.match(/[MQLCZ][^MQLCZ]*/gi);
+  if (!commands || commands.length === 0) return;
+
+  ctx.save();
+  ctx.beginPath();
+
+  for (const cmd of commands) {
+    const type = cmd[0].toUpperCase();
+    const nums = cmd.slice(1).trim().split(/\s+/).map(Number);
+
+    switch (type) {
+      case 'M': {
+        const ry = flipY ? config.gridSize - nums[1] : nums[1];
+        const pt = toCanvas(nums[0], ry, config);
+        ctx.moveTo(pt.x, pt.y);
+        break;
+      }
+      case 'Q': {
+        const ry1 = flipY ? config.gridSize - nums[1] : nums[1];
+        const ry2 = flipY ? config.gridSize - nums[3] : nums[3];
+        const cp = toCanvas(nums[0], ry1, config);
+        const ep = toCanvas(nums[2], ry2, config);
+        ctx.quadraticCurveTo(cp.x, cp.y, ep.x, ep.y);
+        break;
+      }
+      case 'Z':
+        ctx.closePath();
+        break;
+    }
+  }
+
+  if (fillColor) {
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+  }
+  if (strokeColor) {
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth || 1;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * 绘制单笔画的楷体轮廓（填充模式）
+ * @param strokes - strokeData.strokes 数组
+ * @param strokeIndex - 笔画索引
+ * @param flipY - 是否翻转 Y 轴
+ */
+export function drawStrokeOutline(
+  ctx: any,
+  strokes: string[],
+  strokeIndex: number,
+  config: Required<RenderConfig>,
+  flipY: boolean = true,
+  fillColor: string = 'rgba(71, 184, 129, 0.12)',
+) {
+  if (strokeIndex < 0 || strokeIndex >= strokes.length) return;
+  drawSvgPath(ctx, strokes[strokeIndex], config, flipY, fillColor);
+}
+
+/**
+ * 绘制所有笔画的楷体轮廓（填充模式）
+ * @param strokes - strokeData.strokes 数组
+ * @param flipY - 是否翻转 Y 轴
+ */
+export function drawAllStrokeOutlines(
+  ctx: any,
+  strokes: string[],
+  config: Required<RenderConfig>,
+  flipY: boolean = true,
+  fillColor: string = 'rgba(71, 184, 129, 0.12)',
+) {
+  for (const pathStr of strokes) {
+    drawSvgPath(ctx, pathStr, config, flipY, fillColor);
   }
 }
 

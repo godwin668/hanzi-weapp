@@ -5,13 +5,16 @@ import { useAppStore } from '@/store/useAppStore';
 import { callFunction } from '@/services/cloud';
 import { PracticeRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
-import { StrokeAnimationRenderer, drawGrid } from '@/utils/canvasStrokeRenderer';
+import { StrokeAnimationRenderer, drawGrid, drawAllStrokeOutlines } from '@/utils/canvasStrokeRenderer';
 import { calculateScore } from '@/utils/strokeScoring';
+import { createBrushState, calcBrushWidth, resetBrushState } from '@/utils/pressureBrush';
 import styles from './index.module.scss';
 
 const WritePage: React.FC = () => {
+  console.log('[WritePage] === RENDER ===');
   const { selectedCharacters, currentCharIndex, setCurrentCharIndex, nextChar, prevChar } = useAppStore();
   const [showHint, setShowHint] = useState(false);
+  const [showBaseChar, setShowBaseChar] = useState(true);
   const [userStrokes, setUserStrokes] = useState<string[][]>([]);
   const [animCurrentStroke, setAnimCurrentStroke] = useState(0);
   const canvasRef = useRef<any>(null);
@@ -21,10 +24,24 @@ const WritePage: React.FC = () => {
   const currentStrokeRef = useRef<string[]>([]);
   const animRendererRef = useRef<StrokeAnimationRenderer | null>(null);
   const isDrawingRef = useRef(false);
+  const showHintRef = useRef(false);
+  const showBaseCharRef = useRef(true);
+  const brushRef = useRef(createBrushState());
+
+  // 同步 showHint 到 ref
+  useEffect(() => {
+    showHintRef.current = showHint;
+  }, [showHint]);
+
+  // 同步 showBaseChar 到 ref
+  useEffect(() => {
+    showBaseCharRef.current = showBaseChar;
+  }, [showBaseChar]);
 
   const currentChar = selectedCharacters[currentCharIndex];
 
   useEffect(() => {
+    console.log('[WritePage] === EFFECT, char:', currentChar?.char, 'index:', currentCharIndex);
     if (!currentChar) {
       Taro.showToast({ title: '请先选择汉字', icon: 'none' });
       Taro.navigateBack();
@@ -39,13 +56,29 @@ const WritePage: React.FC = () => {
     };
   }, [currentCharIndex]);
 
+  // 绘制底字辅助函数
+  const drawBaseChar = useCallback((ctx: any, w: number, h: number) => {
+    const sd = getStrokeData(currentChar?.char || '');
+    if (sd) {
+      drawAllStrokeOutlines(
+        ctx, sd.strokes,
+        { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 },
+        true,
+        'rgba(0, 0, 0, 0.1)',
+      );
+    }
+  }, [currentChar]);
+
   const initCanvas = (retryCount = 0) => {
+    console.log('[WritePage] initCanvas called, retry:', retryCount);
     const MAX_RETRY = 5;
     setTimeout(() => {
+      console.log('[WritePage] initCanvas setTimeout fired, retry:', retryCount);
       const query = Taro.createSelectorQuery();
       query.select('#writeCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
+          console.log('[WritePage] Query result:', JSON.stringify(res));
           if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
@@ -56,11 +89,17 @@ const WritePage: React.FC = () => {
 
             const lw = res[0].width;
             const lh = res[0].height;
+            console.log('[WritePage] Canvas size:', lw, 'x', lh, 'dpr:', dpr);
             logicalSizeRef.current = { w: lw, h: lh };
             canvasRectRef.current = { left: res[0].left, top: res[0].top, width: lw, height: lh };
 
             // 绘制米字格
             drawGrid(ctx, { canvasWidth: lw, canvasHeight: lh, margin: 20, gridSize: 1024 });
+
+            // 绘制楷体底字
+            if (showBaseCharRef.current) {
+              drawBaseChar(ctx, lw, lh);
+            }
 
             ctx.lineWidth = 4;
             ctx.lineCap = 'round';
@@ -68,12 +107,12 @@ const WritePage: React.FC = () => {
             ctx.strokeStyle = '#333333';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
-            console.log('[WritePage] Canvas initialized successfully');
+            console.log('[WritePage] Canvas initialized successfully, ctxRef set:', !!ctxRef.current);
           } else if (retryCount < MAX_RETRY) {
             console.warn(`[WritePage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
             initCanvas(retryCount + 1);
           } else {
-            console.error('[WritePage] Canvas init failed after retries');
+            console.error('[WritePage] Canvas init failed after retries, res:', JSON.stringify(res));
             Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
@@ -81,26 +120,34 @@ const WritePage: React.FC = () => {
   };
 
   const getCanvasPos = (touch: any) => {
-    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
-    return { x: touch.x, y: touch.y };
+    // 兼容不同事件格式：直接属性 或 detail
+    const x = touch.x ?? touch.clientX ?? 0;
+    const y = touch.y ?? touch.clientY ?? 0;
+    return { x, y };
   };
 
   const handleTouchStart = useCallback((e: any) => {
-    if (showHint || !ctxRef.current) return;
-    const touch = e.touches[0];
+    if (showHintRef.current || !ctxRef.current) return;
+    const touch = e.touches?.[0] || e.detail || {};
     const pos = getCanvasPos(touch);
     isDrawingRef.current = true;
     currentStrokeRef.current = [];
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    // 重置画笔状态，起始用最粗笔宽（模拟起笔顿笔）
+    resetBrushState(brushRef.current);
+    ctxRef.current.lineWidth = brushRef.current.currentWidth;
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(pos.x, pos.y);
-  }, [showHint]);
+  }, []);
 
   const handleTouchMove = useCallback((e: any) => {
     if (!isDrawingRef.current || !ctxRef.current) return;
-    const touch = e.touches[0];
+    const touch = e.touches?.[0] || e.detail || {};
     const pos = getCanvasPos(touch);
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    // 根据运笔速度动态调整笔宽
+    const { width } = calcBrushWidth(brushRef.current, pos);
+    ctxRef.current.lineWidth = width;
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
   }, []);
@@ -120,6 +167,9 @@ const WritePage: React.FC = () => {
     const { w, h } = logicalSizeRef.current;
     ctxRef.current.clearRect(0, 0, w, h);
     drawGrid(ctxRef.current, { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 });
+    if (showBaseCharRef.current) {
+      drawBaseChar(ctxRef.current, w, h);
+    }
     ctxRef.current.strokeStyle = '#333333';
     ctxRef.current.lineWidth = 4;
     setUserStrokes([]);
@@ -155,6 +205,22 @@ const WritePage: React.FC = () => {
       margin: 20,
     });
     renderer.setColors('rgba(71, 184, 129, 0.3)', 'rgba(255, 74, 74, 0.85)');
+
+    // 覆盖 drawBackground，保留底字
+    if (showBaseCharRef.current) {
+      const sd = getStrokeData(currentChar.char);
+      if (sd) {
+        renderer.drawBackground = () => {
+          drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 });
+          drawAllStrokeOutlines(
+            ctx, sd.strokes,
+            { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 },
+            true, 'rgba(0, 0, 0, 0.1)',
+          );
+        };
+      }
+    }
+
     renderer.onAnimationFrame((state) => {
       setAnimCurrentStroke(state.currentStrokeIndex + 1);
     });
@@ -181,12 +247,46 @@ const WritePage: React.FC = () => {
     }
   };
 
+  const handleToggleBaseChar = () => {
+    const newVal = !showBaseCharRef.current;
+    showBaseCharRef.current = newVal;
+    setShowBaseChar(newVal);
+
+    if (!ctxRef.current) return;
+    const { w, h } = logicalSizeRef.current;
+    ctxRef.current.clearRect(0, 0, w, h);
+    drawGrid(ctxRef.current, { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 });
+
+    if (newVal) {
+      drawBaseChar(ctxRef.current, w, h);
+    }
+
+    ctxRef.current.strokeStyle = '#333333';
+    ctxRef.current.lineWidth = 4;
+    ctxRef.current.lineCap = 'round';
+    ctxRef.current.lineJoin = 'round';
+
+    // 重绘已有笔迹
+    userStrokes.forEach(stroke => {
+      ctxRef.current.beginPath();
+      stroke.forEach((pt, i) => {
+        const [x, y] = pt.split(',').map(Number);
+        if (i === 0) ctxRef.current.moveTo(x, y);
+        else ctxRef.current.lineTo(x, y);
+      });
+      ctxRef.current.stroke();
+    });
+  };
+
   const restoreUserStrokes = () => {
     if (!ctxRef.current) return;
     const ctx = ctxRef.current;
     const { w, h } = logicalSizeRef.current;
     ctx.clearRect(0, 0, w, h);
     drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 });
+    if (showBaseCharRef.current) {
+      drawBaseChar(ctx, w, h);
+    }
     ctx.strokeStyle = '#333333';
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
@@ -220,6 +320,12 @@ const WritePage: React.FC = () => {
     }
 
     const aesthetics = Math.round(accuracy * 0.9 + 5);
+
+    // 保存笔迹数据用于结果页对比展示
+    useAppStore.getState().setLastSessionData({
+      char: currentChar?.char || '',
+      userStrokes: [...userStrokes],
+    });
 
     try {
       await callFunction<PracticeRecord>('savePracticeRecord', {
@@ -279,10 +385,10 @@ const WritePage: React.FC = () => {
           id="writeCanvas"
           type="2d"
           className={styles.canvas}
+          disableScroll
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          disableScroll
         />
         {showHint && animCurrentStroke > 0 && (
           <View className={styles.hintOverlay}>
@@ -310,6 +416,12 @@ const WritePage: React.FC = () => {
       )}
 
       <View className={styles.bottomBar}>
+        <View
+          className={`${styles.actionBtn} ${styles.baseCharBtn} ${showBaseChar ? styles.baseCharBtnActive : ''}`}
+          onClick={handleToggleBaseChar}
+        >
+          <Text>{showBaseChar ? '底字 ON' : '底字 OFF'}</Text>
+        </View>
         <View className={`${styles.actionBtn} ${styles.hintBtn}`} onClick={handleToggleHint}>
           <Text>{showHint ? '停止演示' : '笔顺演示'}</Text>
         </View>

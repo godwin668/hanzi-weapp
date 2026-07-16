@@ -5,8 +5,9 @@ import { useAppStore } from '@/store/useAppStore';
 import { callFunction } from '@/services/cloud';
 import { PracticeRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
-import { StrokeAnimationRenderer, drawGrid } from '@/utils/canvasStrokeRenderer';
+import { StrokeAnimationRenderer, drawGrid, drawAllStrokeOutlines } from '@/utils/canvasStrokeRenderer';
 import { calculateScore } from '@/utils/strokeScoring';
+import { createBrushState, calcBrushWidth, resetBrushState } from '@/utils/pressureBrush';
 import styles from './index.module.scss';
 
 const TracePage: React.FC = () => {
@@ -21,6 +22,13 @@ const TracePage: React.FC = () => {
   const currentStrokeRef = useRef<string[]>([]);
   const animRendererRef = useRef<StrokeAnimationRenderer | null>(null);
   const isDrawingRef = useRef(false);
+  const showHintRef = useRef(false);
+  const brushRef = useRef(createBrushState());
+
+  // 同步 showHint 到 ref
+  useEffect(() => {
+    showHintRef.current = showHint;
+  }, [showHint]);
 
   const currentChar = selectedCharacters[currentCharIndex];
 
@@ -46,6 +54,7 @@ const TracePage: React.FC = () => {
       query.select('#traceCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
+          console.log('[TracePage] Query result:', JSON.stringify(res));
           if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
@@ -56,39 +65,22 @@ const TracePage: React.FC = () => {
 
             const lw = res[0].width;
             const lh = res[0].height;
+            console.log('[TracePage] Canvas size:', lw, 'x', lh, 'dpr:', dpr);
             logicalSizeRef.current = { w: lw, h: lh };
             canvasRectRef.current = { left: res[0].left, top: res[0].top, width: lw, height: lh };
 
             // 绘制米字格
             drawGrid(ctx, { canvasWidth: lw, canvasHeight: lh, margin: 30, gridSize: 1024 });
 
-            // 绘制描红底字（基于真实 medians 数据）
+            // 绘制描红底字（基于 strokes 楷体轮廓）
             const strokeData = getStrokeData(currentChar?.char || '');
             if (strokeData) {
-              const margin = 30;
-              const drawW = lw - margin * 2;
-              const drawH = lh - margin * 2;
-
-              ctx.save();
-              ctx.strokeStyle = 'rgba(71, 184, 129, 0.08)';
-              ctx.lineWidth = 2;
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-
-              for (const medians of strokeData.medians) {
-                if (medians.length < 2) continue;
-                ctx.beginPath();
-                const firstX = margin + (medians[0][0] / 1024) * drawW;
-                const firstY = margin + (medians[0][1] / 1024) * drawH;
-                ctx.moveTo(firstX, firstY);
-                for (let i = 1; i < medians.length; i++) {
-                  const px = margin + (medians[i][0] / 1024) * drawW;
-                  const py = margin + (medians[i][1] / 1024) * drawH;
-                  ctx.lineTo(px, py);
-                }
-                ctx.stroke();
-              }
-              ctx.restore();
+              drawAllStrokeOutlines(
+                ctx, strokeData.strokes,
+                { canvasWidth: lw, canvasHeight: lh, margin: 30, gridSize: 1024 },
+                true,
+                'rgba(71, 184, 129, 0.1)',
+              );
             }
 
             ctx.lineWidth = 4;
@@ -97,12 +89,12 @@ const TracePage: React.FC = () => {
             ctx.strokeStyle = '#FFB347';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
-            console.log('[TracePage] Canvas initialized successfully');
+            console.log('[TracePage] Canvas initialized successfully, ctxRef set:', !!ctxRef.current);
           } else if (retryCount < MAX_RETRY) {
             console.warn(`[TracePage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
             initCanvas(retryCount + 1);
           } else {
-            console.error('[TracePage] Canvas init failed after retries');
+            console.error('[TracePage] Canvas init failed after retries, res:', JSON.stringify(res));
             Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
@@ -110,26 +102,32 @@ const TracePage: React.FC = () => {
   };
 
   const getCanvasPos = (touch: any) => {
-    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
-    return { x: touch.x, y: touch.y };
+    // 兼容不同事件格式：直接属性 或 detail
+    const x = touch.x ?? touch.clientX ?? 0;
+    const y = touch.y ?? touch.clientY ?? 0;
+    return { x, y };
   };
 
   const handleTouchStart = useCallback((e: any) => {
-    if (showHint || !ctxRef.current) return;
+    if (showHintRef.current || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
     isDrawingRef.current = true;
     currentStrokeRef.current = [];
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    resetBrushState(brushRef.current);
+    ctxRef.current.lineWidth = brushRef.current.currentWidth;
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(pos.x, pos.y);
-  }, [showHint]);
+  }, []);
 
   const handleTouchMove = useCallback((e: any) => {
     if (!isDrawingRef.current || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    const { width } = calcBrushWidth(brushRef.current, pos);
+    ctxRef.current.lineWidth = width;
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
   }, []);
@@ -176,25 +174,13 @@ const TracePage: React.FC = () => {
     ctx.clearRect(0, 0, w, h);
     drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
 
-    // 淡色底字
-    const margin = 30;
-    const drawW = w - margin * 2;
-    const drawH = h - margin * 2;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(71, 184, 129, 0.06)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (const medians of strokeData.medians) {
-      if (medians.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(margin + (medians[0][0] / 1024) * drawW, margin + (medians[0][1] / 1024) * drawH);
-      for (let i = 1; i < medians.length; i++) {
-        ctx.lineTo(margin + (medians[i][0] / 1024) * drawW, margin + (medians[i][1] / 1024) * drawH);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
+    // 淡色底字（楷体轮廓）
+    drawAllStrokeOutlines(
+      ctx, strokeData.strokes,
+      { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
+      true,
+      'rgba(71, 184, 129, 0.07)',
+    );
 
     const renderer = new StrokeAnimationRenderer(ctx, strokeData.medians, {
       canvasWidth: w,
@@ -205,22 +191,13 @@ const TracePage: React.FC = () => {
     renderer.drawBackground = () => {
       ctx.clearRect(0, 0, w, h);
       drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
-      // 重绘底字
-      ctx.save();
-      ctx.strokeStyle = 'rgba(71, 184, 129, 0.06)';
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      for (const medians of strokeData.medians) {
-        if (medians.length < 2) continue;
-        ctx.beginPath();
-        ctx.moveTo(margin + (medians[0][0] / 1024) * drawW, margin + (medians[0][1] / 1024) * drawH);
-        for (let i = 1; i < medians.length; i++) {
-          ctx.lineTo(margin + (medians[i][0] / 1024) * drawW, margin + (medians[i][1] / 1024) * drawH);
-        }
-        ctx.stroke();
-      }
-      ctx.restore();
+      // 重绘底字（楷体轮廓）
+      drawAllStrokeOutlines(
+        ctx, strokeData.strokes,
+        { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 },
+        true,
+        'rgba(71, 184, 129, 0.07)',
+      );
     };
 
     renderer.setColors('rgba(71, 184, 129, 0.35)', 'rgba(255, 74, 74, 0.85)');
@@ -265,6 +242,12 @@ const TracePage: React.FC = () => {
     }
 
     const aesthetics = Math.round(accuracy * 0.9 + 5);
+
+    // 保存笔迹数据用于结果页对比展示
+    useAppStore.getState().setLastSessionData({
+      char: currentChar?.char || '',
+      userStrokes: [...userStrokes],
+    });
 
     try {
       await callFunction<PracticeRecord>('savePracticeRecord', {
@@ -324,10 +307,10 @@ const TracePage: React.FC = () => {
           id="traceCanvas"
           type="2d"
           className={styles.canvas}
+          disableScroll
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          disableScroll
         />
         {showHint && animCurrentStroke > 0 && (
           <View className={styles.hintOverlay}>

@@ -8,6 +8,7 @@ import { TestRecord } from '@/types';
 import { getStrokeData } from '@/data/strokeData';
 import { drawGrid } from '@/utils/canvasStrokeRenderer';
 import { calculateScore } from '@/utils/strokeScoring';
+import { createBrushState, calcBrushWidth, resetBrushState } from '@/utils/pressureBrush';
 import styles from './index.module.scss';
 
 const TestPage: React.FC = () => {
@@ -24,6 +25,7 @@ const TestPage: React.FC = () => {
   const timerRef = useRef<any>(null);
   const currentStrokeRef = useRef<string[]>([]);
   const isDrawingRef = useRef(false);
+  const brushRef = useRef(createBrushState());
 
   const currentChar = selectedCharacters[charIndex];
 
@@ -53,6 +55,7 @@ const TestPage: React.FC = () => {
       query.select('#testCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
+          console.log('[TestPage] Query result:', JSON.stringify(res));
           if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
@@ -63,6 +66,7 @@ const TestPage: React.FC = () => {
 
             const lw = res[0].width;
             const lh = res[0].height;
+            console.log('[TestPage] Canvas size:', lw, 'x', lh, 'dpr:', dpr);
             logicalSizeRef.current = { w: lw, h: lh };
             canvasRectRef.current = { left: res[0].left, top: res[0].top, width: lw, height: lh };
 
@@ -75,12 +79,12 @@ const TestPage: React.FC = () => {
             ctx.strokeStyle = '#333333';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
-            console.log('[TestPage] Canvas initialized successfully');
+            console.log('[TestPage] Canvas initialized successfully, ctxRef set:', !!ctxRef.current);
           } else if (retryCount < MAX_RETRY) {
             console.warn(`[TestPage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
             initCanvas(retryCount + 1);
           } else {
-            console.error('[TestPage] Canvas init failed after retries');
+            console.error('[TestPage] Canvas init failed after retries, res:', JSON.stringify(res));
             Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
@@ -88,8 +92,10 @@ const TestPage: React.FC = () => {
   };
 
   const getCanvasPos = (touch: any) => {
-    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
-    return { x: touch.x, y: touch.y };
+    // 兼容不同事件格式：直接属性 或 detail
+    const x = touch.x ?? touch.clientX ?? 0;
+    const y = touch.y ?? touch.clientY ?? 0;
+    return { x, y };
   };
 
   const handleTouchStart = useCallback((e: any) => {
@@ -99,6 +105,8 @@ const TestPage: React.FC = () => {
     isDrawingRef.current = true;
     currentStrokeRef.current = [];
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    resetBrushState(brushRef.current);
+    ctxRef.current.lineWidth = brushRef.current.currentWidth;
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(pos.x, pos.y);
   }, []);
@@ -108,6 +116,8 @@ const TestPage: React.FC = () => {
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
+    const { width } = calcBrushWidth(brushRef.current, pos);
+    ctxRef.current.lineWidth = width;
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
   }, []);
@@ -170,6 +180,12 @@ const TestPage: React.FC = () => {
     const finalScores = [...scores];
     finalScores[charIndex] = lastScore;
     const avgAccuracy = finalScores.reduce((a, b) => a + b, 0) / finalScores.length;
+
+    // 保存最后一个字的笔迹数据用于结果页对比展示
+    useAppStore.getState().setLastSessionData({
+      char: currentChar?.char || '',
+      userStrokes: [...userStrokes],
+    });
 
     try {
       await callFunction<TestRecord>('saveTestRecord', {
@@ -234,10 +250,10 @@ const TestPage: React.FC = () => {
           id="testCanvas"
           type="2d"
           className={styles.canvas}
+          disableScroll
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          disableScroll
         />
       </View>
 
