@@ -1,0 +1,203 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  background: $color-bg-page;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: $spacing-xl $page-padding;
+}
+
+.scoreCircle {
+  width: 260rpx;
+  height: 260rpx;
+  border-radius: $radius-round;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: $spacing-xl;
+  position: relative;
+
+  &.excellent {
+    background: linear-gradient(135deg, #73D13D, #95DE64);
+    box-shadow: 0 8rpx 24rpx rgba(115, 209, 61, 0.35);
+  }
+
+  &.good {
+    background: linear-gradient(135deg, $color-primary, $color-primary-light);
+    box-shadow: 0 8rpx 24rpx rgba($color-primary, 0.35);
+  }
+
+  &.fair {
+    background: linear-gradient(135deg, $color-accent, $color-accent-light);
+    box-shadow: 0 8rpx 24rpx rgba($color-accent, 0.35);
+  }
+
+  &.poor {
+    background: linear-gradient(135deg, $color-error, #FF9E9E);
+    box-shadow: 0 8rpx 24rpx rgba($color-error, 0.35);
+  }
+}
+
+.scoreValue {
+  font-size: 72rpx;
+  font-weight: $font-weight-bold;
+  color: $color-text-white;
+  line-height: 1;
+}
+
+.scoreLabel {
+  font-size: $font-size-sm;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: $spacing-xs;
+}
+
+.encourage {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-xl;
+}
+
+.detailSection {
+  width: 100%;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  margin-bottom: $spacing-md;
+}
+
+.detailTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-md;
+}
+
+.detailRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.detailLabel {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.detailValue {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.scoreBar {
+  flex: 1;
+  height: 12rpx;
+  background: $color-bg-hover;
+  border-radius: $radius-round;
+  margin: 0 $spacing-md;
+  overflow: hidden;
+}
+
+.scoreBarFill {
+  height: 100%;
+  border-radius: $radius-round;
+  transition: width 0.5s ease;
+}
+
+.compareSection {
+  width: 100%;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  margin-bottom: $spacing-md;
+}
+
+.compareGrid {
+  display: flex;
+  gap: $spacing-md;
+}
+
+.compareItem {
+  flex: 1;
+  text-align: center;
+}
+
+.compareChar {
+  width: 120rpx;
+  height: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-md;
+  font-size: 56rpx;
+  font-weight: $font-weight-bold;
+  margin: 0 auto $spacing-sm;
+}
+
+.yourChar {
+  background: $color-bg-hover;
+  color: $color-text-secondary;
+  border: 2rpx dashed $color-border;
+}
+
+.standardChar {
+  background: linear-gradient(135deg, rgba($color-primary, 0.1), rgba($color-primary-light, 0.1));
+  color: $color-primary;
+  border: 2rpx solid $color-primary;
+}
+
+.compareLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.actions {
+  width: 100%;
+  display: flex;
+  gap: $spacing-md;
+  margin-top: $spacing-md;
+}
+
+.actionBtn {
+  flex: 1;
+  height: $button-height-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-button;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  transition: all $transition-base;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.backBtn {
+  background: $color-bg-hover;
+  color: $color-text-secondary;
+}
+
+.shareBtn {
+  background: linear-gradient(135deg, $color-primary, $color-primary-light);
+  color: $color-text-white;
+}
+
+.continueBtn {
+  background: linear-gradient(135deg, $color-accent, $color-accent-light);
+  color: $color-text-white;
+}

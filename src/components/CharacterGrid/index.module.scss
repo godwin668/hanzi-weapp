@@ -1,0 +1,38 @@
+@use '@/styles/variables.scss' as *;
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  padding: 0;
+}
+
+.gridItem {
+  width: calc((100% - 80rpx) / 6);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-bg-card;
+  border: 2rpx solid $color-border;
+  border-radius: $radius-sm;
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  transition: all $transition-base;
+
+  &.selected {
+    background: linear-gradient(135deg, $color-primary, $color-primary-light);
+    color: $color-text-white;
+    border-color: $color-primary;
+    box-shadow: 0 4rpx 12rpx rgba($color-primary, 0.3);
+  }
+}
+
+.pinyin {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  display: block;
+  text-align: center;
+  margin-top: $spacing-xs;
+}
