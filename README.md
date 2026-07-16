@@ -19,14 +19,20 @@
 ## 快速开始
 
 ```bash
-# 安装依赖
+# 安装依赖（npm/pnpm 均可）
 npm install
+# 或
+pnpm install
 
 # 微信小程序（自动编译）
 npm run dev:weapp
+# 或
+pnpm run dev:weapp
 
 # H5 网页版（自动编译）
 npm run dev:h5
+# 或
+pnpm run dev:h5
 ```
 
 ## 导入微信开发者工具

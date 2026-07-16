@@ -1,0 +1,12 @@
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  '@tarojs/binding': true
+  '@tarojs/cli': true
+  bufferutil: true
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  less: true
+  minidev: true
+  protobufjs: true

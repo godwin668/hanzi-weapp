@@ -4,7 +4,8 @@ import Taro, { useRouter } from '@tarojs/taro';
 import classnames from 'classnames';
 import { useAppStore } from '@/store/useAppStore';
 import { getStrokeData } from '@/data/strokeData';
-import { drawStroke, drawGrid } from '@/utils/canvasStrokeRenderer';
+import { drawStroke, drawGrid, drawAllStrokeOutlines } from '@/utils/canvasStrokeRenderer';
+import { useCanvasCore } from '@/hooks/useCanvasCore';
 import styles from './index.module.scss';
 
 const ResultPage: React.FC = () => {
@@ -20,11 +21,16 @@ const ResultPage: React.FC = () => {
   const aestheticsNum = parseInt(aesthetics as string, 10) || 0;
   const isFromHistory = fromHistory === '1';
 
-  // Canvas refs
-  const userCanvasRef = useRef<any>(null);
-  const userCtxRef = useRef<any>(null);
-  const stdCanvasRef = useRef<any>(null);
-  const stdCtxRef = useRef<any>(null);
+  // Canvas refs via useCanvasCore
+  const {
+    ctxRef: userCtxRef,
+    initCanvas: initUserCanvas,
+  } = useCanvasCore({ canvasId: '#userStrokeCanvas' });
+
+  const {
+    ctxRef: stdCtxRef,
+    initCanvas: initStdCanvas,
+  } = useCanvasCore({ canvasId: '#stdStrokeCanvas' });
 
   const getScoreLevel = (s: number) => {
     if (s >= 90) return { level: 'excellent', text: '太棒了！', emoji: '🌟' };
@@ -55,82 +61,53 @@ const ResultPage: React.FC = () => {
       return;
     }
 
-    let retryCount = 0;
-    const MAX_RETRY = 5;
+    initUserCanvas((ctx, w, h) => {
+      drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 6, gridSize: 1024 }, 'rgba(0,0,0,0.06)');
 
-    const tryInit = () => {
-      const query = Taro.createSelectorQuery();
-      query.select('#userStrokeCanvas')
-        .fields({ node: true, size: true })
-        .exec((res) => {
-          if (res[0]?.node) {
-            const canvas = res[0].node;
-            const ctx = canvas.getContext('2d');
-            const dpr = Taro.getSystemInfoSync().pixelRatio;
-            const w = res[0].width;
-            const h = res[0].height;
-            canvas.width = w * dpr;
-            canvas.height = h * dpr;
-            ctx.scale(dpr, dpr);
-
-            // 绘制网格
-            drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 6, gridSize: 1024 }, 'rgba(0,0,0,0.06)');
-
-            // 绘制用户笔迹
-            const strokes = lastSessionData.userStrokes;
-            if (strokes.length > 0) {
-              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-              for (const stroke of strokes) {
-                for (const pt of stroke) {
-                  const [x, y] = pt.split(',').map(Number);
-                  if (x < minX) minX = x;
-                  if (y < minY) minY = y;
-                  if (x > maxX) maxX = x;
-                  if (y > maxY) maxY = y;
-                }
-              }
-              const rangeX = maxX - minX || 1;
-              const rangeY = maxY - minY || 1;
-              const margin = 12;
-              const drawW = w - margin * 2;
-              const drawH = h - margin * 2;
-              const scale = Math.min(drawW / rangeX, drawH / rangeY);
-
-              ctx.strokeStyle = '#333';
-              ctx.lineWidth = 2;
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-
-              for (const stroke of strokes) {
-                if (stroke.length < 2) continue;
-                ctx.beginPath();
-                const [sx, sy] = stroke[0].split(',').map(Number);
-                const px0 = margin + (sx - minX) * scale + (drawW - rangeX * scale) / 2;
-                const py0 = margin + (sy - minY) * scale + (drawH - rangeY * scale) / 2;
-                ctx.moveTo(px0, py0);
-                for (let i = 1; i < stroke.length; i++) {
-                  const [px, py] = stroke[i].split(',').map(Number);
-                  const cx = margin + (px - minX) * scale + (drawW - rangeX * scale) / 2;
-                  const cy = margin + (py - minY) * scale + (drawH - rangeY * scale) / 2;
-                  ctx.lineTo(cx, cy);
-                }
-                ctx.stroke();
-              }
-            }
-            userCtxRef.current = ctx;
-            userCanvasRef.current = canvas;
-            setUserCanvasReady(true);
-          } else if (retryCount < MAX_RETRY) {
-            retryCount++;
-            setTimeout(tryInit, 150 + retryCount * 100);
-          } else {
-            setUserCanvasReady(false);
+      const strokes = lastSessionData.userStrokes;
+      if (strokes.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const stroke of strokes) {
+          for (const pt of stroke) {
+            const [x, y] = pt.split(',').map(Number);
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
           }
-        });
-    };
+        }
+        const rangeX = maxX - minX || 1;
+        const rangeY = maxY - minY || 1;
+        const margin = 12;
+        const drawW = w - margin * 2;
+        const drawH = h - margin * 2;
+        const scale = Math.min(drawW / rangeX, drawH / rangeY);
 
-    setTimeout(tryInit, 200);
-  }, [lastSessionData]);
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        for (const stroke of strokes) {
+          if (stroke.length < 2) continue;
+          ctx.beginPath();
+          const [sx, sy] = stroke[0].split(',').map(Number);
+          const px0 = margin + (sx - minX) * scale + (drawW - rangeX * scale) / 2;
+          const py0 = margin + (sy - minY) * scale + (drawH - rangeY * scale) / 2;
+          ctx.moveTo(px0, py0);
+          for (let i = 1; i < stroke.length; i++) {
+            const [px, py] = stroke[i].split(',').map(Number);
+            const cx = margin + (px - minX) * scale + (drawW - rangeX * scale) / 2;
+            const cy = margin + (py - minY) * scale + (drawH - rangeY * scale) / 2;
+            ctx.lineTo(cx, cy);
+          }
+          ctx.stroke();
+        }
+      }
+
+      setUserCanvasReady(true);
+    });
+  }, [lastSessionData, initUserCanvas]);
 
   // 初始化标准字帖 Canvas
   useEffect(() => {
@@ -140,57 +117,21 @@ const ResultPage: React.FC = () => {
       return;
     }
 
-    let retryCount = 0;
-    const MAX_RETRY = 5;
+    initStdCanvas((ctx, w, h) => {
+      drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 6, gridSize: 1024 }, 'rgba(71,184,129,0.15)');
 
-    const tryInit = () => {
-      const query = Taro.createSelectorQuery();
-      query.select('#stdStrokeCanvas')
-        .fields({ node: true, size: true })
-        .exec((res) => {
-          if (res[0]?.node) {
-            const canvas = res[0].node;
-            const ctx = canvas.getContext('2d');
-            const dpr = Taro.getSystemInfoSync().pixelRatio;
-            const w = res[0].width;
-            const h = res[0].height;
-            canvas.width = w * dpr;
-            canvas.height = h * dpr;
-            ctx.scale(dpr, dpr);
+      const strokeData = getStrokeData(charStr);
+      if (strokeData) {
+        drawAllStrokeOutlines(ctx, strokeData.strokes, {
+          canvasWidth: w, canvasHeight: h,
+          margin: 12, gridSize: 1024,
+          lineWidth: 2.5, lineCap: 'round', lineJoin: 'round',
+        }, false, 'rgba(71, 184, 129, 0.35)');
+      }
 
-            // 绘制米字格
-            drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 6, gridSize: 1024 }, 'rgba(71,184,129,0.15)');
-
-            // 绘制标准笔画
-            const strokeData = getStrokeData(charStr);
-            if (strokeData) {
-              const margin = 12;
-              ctx.strokeStyle = '#47B881';
-              ctx.lineWidth = 2.5;
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-              for (const medians of strokeData.medians) {
-                drawStroke(ctx, medians, {
-                  canvasWidth: w, canvasHeight: h,
-                  margin, gridSize: 1024,
-                  lineWidth: 2.5, lineCap: 'round', lineJoin: 'round',
-                }, '#47B881');
-              }
-            }
-            stdCtxRef.current = ctx;
-            stdCanvasRef.current = canvas;
-            setStdCanvasReady(true);
-          } else if (retryCount < MAX_RETRY) {
-            retryCount++;
-            setTimeout(tryInit, 150 + retryCount * 100);
-          } else {
-            setStdCanvasReady(false);
-          }
-        });
-    };
-
-    setTimeout(tryInit, 200);
-  }, [char, lastSessionData]);
+      setStdCanvasReady(true);
+    });
+  }, [char, lastSessionData, initStdCanvas]);
 
   const handleShare = () => {
     Taro.showShareMenu({

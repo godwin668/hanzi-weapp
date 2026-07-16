@@ -74,7 +74,6 @@ function normalizePoints(points: string[]): [number, number][] {
     return [x, y] as [number, number];
   });
 
-  // 找到包围盒
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const [x, y] of parsed) {
     if (x < minX) minX = x;
@@ -86,10 +85,9 @@ function normalizePoints(points: string[]): [number, number][] {
   const rangeX = maxX - minX || 1;
   const rangeY = maxY - minY || 1;
 
-  // 归一化到 0-1
   return parsed.map(([x, y]) => [
     (x - minX) / rangeX,
-    (y - minY) / rangeY,
+    1 - (y - minY) / rangeY,
   ]);
 }
 
