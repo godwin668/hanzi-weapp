@@ -11,7 +11,6 @@ import styles from './index.module.scss';
 
 const TracePage: React.FC = () => {
   const { selectedCharacters, currentCharIndex, setCurrentCharIndex, nextChar, prevChar } = useAppStore();
-  const [isDrawing, setIsDrawing] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [animCurrentStroke, setAnimCurrentStroke] = useState(0);
   const [userStrokes, setUserStrokes] = useState<string[][]>([]);
@@ -21,6 +20,7 @@ const TracePage: React.FC = () => {
   const logicalSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const currentStrokeRef = useRef<string[]>([]);
   const animRendererRef = useRef<StrokeAnimationRenderer | null>(null);
+  const isDrawingRef = useRef(false);
 
   const currentChar = selectedCharacters[currentCharIndex];
 
@@ -39,13 +39,14 @@ const TracePage: React.FC = () => {
     };
   }, [currentCharIndex]);
 
-  const initCanvas = () => {
+  const initCanvas = (retryCount = 0) => {
+    const MAX_RETRY = 5;
     setTimeout(() => {
       const query = Taro.createSelectorQuery();
       query.select('#traceCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
-          if (res[0]) {
+          if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
             const dpr = Taro.getSystemInfoSync().pixelRatio;
@@ -64,8 +65,6 @@ const TracePage: React.FC = () => {
             // 绘制描红底字（基于真实 medians 数据）
             const strokeData = getStrokeData(currentChar?.char || '');
             if (strokeData) {
-              const { drawAllStrokes: renderStrokes } = require('@/utils/canvasStrokeRenderer');
-              // 用极淡颜色绘制所有标准笔画作为描红底
               const margin = 30;
               const drawW = lw - margin * 2;
               const drawH = lh - margin * 2;
@@ -98,16 +97,20 @@ const TracePage: React.FC = () => {
             ctx.strokeStyle = '#FFB347';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
+            console.log('[TracePage] Canvas initialized successfully');
+          } else if (retryCount < MAX_RETRY) {
+            console.warn(`[TracePage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
+            initCanvas(retryCount + 1);
+          } else {
+            console.error('[TracePage] Canvas init failed after retries');
+            Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
-    }, 300);
+    }, 100 + retryCount * 150);
   };
 
   const getCanvasPos = (touch: any) => {
-    const rect = canvasRectRef.current;
-    if (rect) {
-      return { x: touch.x - rect.left, y: touch.y - rect.top };
-    }
+    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
     return { x: touch.x, y: touch.y };
   };
 
@@ -115,7 +118,7 @@ const TracePage: React.FC = () => {
     if (showHint || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     currentStrokeRef.current = [];
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.beginPath();
@@ -123,23 +126,23 @@ const TracePage: React.FC = () => {
   }, [showHint]);
 
   const handleTouchMove = useCallback((e: any) => {
-    if (!isDrawing || !ctxRef.current) return;
+    if (!isDrawingRef.current || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
-  }, [isDrawing]);
+  }, []);
 
   const handleTouchEnd = useCallback(() => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
     ctxRef.current?.closePath();
     if (currentStrokeRef.current.length > 1) {
       setUserStrokes(prev => [...prev, [...currentStrokeRef.current]]);
     }
     currentStrokeRef.current = [];
-  }, [isDrawing]);
+  }, []);
 
   const handleClear = () => {
     if (!ctxRef.current) return;
@@ -154,7 +157,11 @@ const TracePage: React.FC = () => {
 
   // 笔顺动画
   const startAnimation = useCallback(() => {
-    if (!currentChar || !ctxRef.current) return;
+    if (!currentChar) return;
+    if (!ctxRef.current) {
+      Taro.showToast({ title: '画布尚未就绪，请稍候', icon: 'none' });
+      return;
+    }
 
     const strokeData = getStrokeData(currentChar.char);
     if (!strokeData || strokeData.medians.length === 0) {
@@ -293,9 +300,23 @@ const TracePage: React.FC = () => {
             <Text className={styles.strokeInfo}>{totalStrokes}画</Text>
           </View>
         </View>
-        <Text className={styles.progress}>
-          {currentCharIndex + 1} / {selectedCharacters.length}
-        </Text>
+        <View className={styles.topRight}>
+          <View className={styles.prevNext}>
+            {currentCharIndex > 0 && (
+              <View className={styles.navBtn} onClick={prevChar}>
+                <Text>‹</Text>
+              </View>
+            )}
+            {currentCharIndex < selectedCharacters.length - 1 && (
+              <View className={styles.navBtn} onClick={nextChar}>
+                <Text>›</Text>
+              </View>
+            )}
+          </View>
+          <Text className={styles.progress}>
+            {currentCharIndex + 1} / {selectedCharacters.length}
+          </Text>
+        </View>
       </View>
 
       <View className={styles.canvasWrapper}>
@@ -318,11 +339,6 @@ const TracePage: React.FC = () => {
       </View>
 
       <View className={styles.bottomBar}>
-        {currentCharIndex > 0 && (
-          <View className={styles.navBtn} onClick={prevChar}>
-            <Text>‹</Text>
-          </View>
-        )}
         <View className={`${styles.actionBtn} ${styles.clearBtn}`} onClick={handleClear}>
           <Text>清除重写</Text>
         </View>
@@ -332,11 +348,6 @@ const TracePage: React.FC = () => {
         <View className={`${styles.actionBtn} ${styles.submitBtn}`} onClick={handleSubmit}>
           <Text>提交评分</Text>
         </View>
-        {currentCharIndex < selectedCharacters.length - 1 && (
-          <View className={styles.navBtn} onClick={nextChar}>
-            <Text>›</Text>
-          </View>
-        )}
       </View>
     </View>
   );

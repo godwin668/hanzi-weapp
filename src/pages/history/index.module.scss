@@ -3,7 +3,7 @@
 .page {
   min-height: 100vh;
   background: $color-bg-page;
-  padding-bottom: $spacing-xl;
+  padding-bottom: calc($spacing-xl + env(safe-area-inset-bottom));
 }
 
 .tabs {
@@ -122,6 +122,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: all $transition-base;
+
+  &:active {
+    background: $color-bg-hover;
+    transform: scale(0.98);
+  }
 }
 
 .recordLeft {

@@ -7,6 +7,7 @@
   flex-direction: column;
   align-items: center;
   padding: $spacing-xl $page-padding;
+  padding-bottom: calc($spacing-xl + env(safe-area-inset-bottom));
 }
 
 .scoreCircle {

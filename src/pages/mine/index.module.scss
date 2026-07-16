@@ -43,6 +43,7 @@
 
 .body {
   padding: $spacing-md $page-padding;
+  padding-bottom: calc($spacing-md + env(safe-area-inset-bottom));
 }
 
 .section {

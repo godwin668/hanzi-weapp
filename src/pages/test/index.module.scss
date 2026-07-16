@@ -71,6 +71,8 @@
   gap: $spacing-sm;
   padding: $spacing-md $page-padding;
   background: $color-bg-card;
+  overflow-x: auto;
+  flex-wrap: nowrap;
 }
 
 .charTag {

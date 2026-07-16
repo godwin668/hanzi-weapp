@@ -26,12 +26,12 @@
 
 .statsRow {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: $spacing-sm;
 }
 
 .statCard {
-  flex: 1;
+  width: calc((100% - $spacing-sm) / 2);
   background: rgba(255, 255, 255, 0.2);
   border-radius: $radius-md;
   padding: $spacing-md;

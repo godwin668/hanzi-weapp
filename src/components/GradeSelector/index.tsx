@@ -22,7 +22,7 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({ currentGrade, onSelect })
             className={classnames(styles.gradeItem, currentGrade === g && styles.active)}
             onClick={() => onSelect(g)}
           >
-            <Text>{g}年级</Text>
+            <Text>{g}</Text>
           </View>
         ))}
       </View>

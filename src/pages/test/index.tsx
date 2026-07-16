@@ -5,6 +5,9 @@ import classnames from 'classnames';
 import { useAppStore } from '@/store/useAppStore';
 import { callFunction } from '@/services/cloud';
 import { TestRecord } from '@/types';
+import { getStrokeData } from '@/data/strokeData';
+import { drawGrid } from '@/utils/canvasStrokeRenderer';
+import { calculateScore } from '@/utils/strokeScoring';
 import styles from './index.module.scss';
 
 const TestPage: React.FC = () => {
@@ -12,13 +15,15 @@ const TestPage: React.FC = () => {
   const [charIndex, setCharIndex] = useState(0);
   const [completedChars, setCompletedChars] = useState<number[]>([]);
   const [scores, setScores] = useState<number[]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [userStrokes, setUserStrokes] = useState<string[][]>([]);
   const canvasRef = useRef<any>(null);
   const ctxRef = useRef<any>(null);
   const canvasRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const logicalSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const timerRef = useRef<any>(null);
+  const currentStrokeRef = useRef<string[]>([]);
+  const isDrawingRef = useRef(false);
 
   const currentChar = selectedCharacters[charIndex];
 
@@ -41,13 +46,14 @@ const TestPage: React.FC = () => {
     }
   }, [charIndex]);
 
-  const initCanvas = () => {
+  const initCanvas = (retryCount = 0) => {
+    const MAX_RETRY = 5;
     setTimeout(() => {
       const query = Taro.createSelectorQuery();
       query.select('#testCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
-          if (res[0]) {
+          if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
             const dpr = Taro.getSystemInfoSync().pixelRatio;
@@ -60,15 +66,8 @@ const TestPage: React.FC = () => {
             logicalSizeRef.current = { w: lw, h: lh };
             canvasRectRef.current = { left: res[0].left, top: res[0].top, width: lw, height: lh };
 
-            // 绘制米字格辅助线
-            ctx.strokeStyle = 'rgba(71, 184, 129, 0.1)';
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(lw / 2, 0);
-            ctx.lineTo(lw / 2, lh);
-            ctx.moveTo(0, lh / 2);
-            ctx.lineTo(lw, lh / 2);
-            ctx.stroke();
+            // 绘制米字格
+            drawGrid(ctx, { canvasWidth: lw, canvasHeight: lh, margin: 30, gridSize: 1024 });
 
             ctx.lineWidth = 4;
             ctx.lineCap = 'round';
@@ -76,16 +75,20 @@ const TestPage: React.FC = () => {
             ctx.strokeStyle = '#333333';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
+            console.log('[TestPage] Canvas initialized successfully');
+          } else if (retryCount < MAX_RETRY) {
+            console.warn(`[TestPage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
+            initCanvas(retryCount + 1);
+          } else {
+            console.error('[TestPage] Canvas init failed after retries');
+            Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
-    }, 300);
+    }, 100 + retryCount * 150);
   };
 
   const getCanvasPos = (touch: any) => {
-    const rect = canvasRectRef.current;
-    if (rect) {
-      return { x: touch.x - rect.left, y: touch.y - rect.top };
-    }
+    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
     return { x: touch.x, y: touch.y };
   };
 
@@ -93,45 +96,54 @@ const TestPage: React.FC = () => {
     const touch = e.touches[0];
     if (!ctxRef.current) return;
     const pos = getCanvasPos(touch);
-    setIsDrawing(true);
+    isDrawingRef.current = true;
+    currentStrokeRef.current = [];
+    currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(pos.x, pos.y);
   }, []);
 
   const handleTouchMove = useCallback((e: any) => {
-    if (!isDrawing || !ctxRef.current) return;
+    if (!isDrawingRef.current || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
+    currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
-  }, [isDrawing]);
+  }, []);
 
   const handleTouchEnd = useCallback(() => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
     ctxRef.current?.closePath();
-  }, [isDrawing]);
+    if (currentStrokeRef.current.length > 1) {
+      setUserStrokes(prev => [...prev, [...currentStrokeRef.current]]);
+    }
+    currentStrokeRef.current = [];
+  }, []);
 
   const handleClear = () => {
     if (!ctxRef.current) return;
     const { w, h } = logicalSizeRef.current;
     ctxRef.current.clearRect(0, 0, w, h);
-    // 重绘米字格
-    const ctx = ctxRef.current;
-    ctx.strokeStyle = 'rgba(71, 184, 129, 0.1)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(w / 2, 0);
-    ctx.lineTo(w / 2, h);
-    ctx.moveTo(0, h / 2);
-    ctx.lineTo(w, h / 2);
-    ctx.stroke();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#333333';
+    drawGrid(ctxRef.current, { canvasWidth: w, canvasHeight: h, margin: 30, gridSize: 1024 });
+    ctxRef.current.strokeStyle = '#333333';
+    ctxRef.current.lineWidth = 4;
+    setUserStrokes([]);
   };
 
   const handleNextChar = () => {
-    const score = Math.floor(Math.random() * 20) + 70;
+    // 使用真实评分
+    const strokeData = getStrokeData(currentChar?.char || '');
+    let score: number;
+
+    if (strokeData && userStrokes.length > 0) {
+      const result = calculateScore(userStrokes, strokeData.medians);
+      score = result.score;
+    } else {
+      score = userStrokes.length > 0 ? 50 : 10;
+    }
+
     const newScores = [...scores];
     newScores[charIndex] = score;
     setScores(newScores);
@@ -144,8 +156,19 @@ const TestPage: React.FC = () => {
 
   const handleSubmit = async () => {
     clearInterval(timerRef.current);
+
+    // 最后一个字的评分
+    const strokeData = getStrokeData(currentChar?.char || '');
+    let lastScore: number;
+    if (strokeData && userStrokes.length > 0) {
+      const result = calculateScore(userStrokes, strokeData.medians);
+      lastScore = result.score;
+    } else {
+      lastScore = userStrokes.length > 0 ? 50 : 10;
+    }
+
     const finalScores = [...scores];
-    finalScores[charIndex] = Math.floor(Math.random() * 20) + 70;
+    finalScores[charIndex] = lastScore;
     const avgAccuracy = finalScores.reduce((a, b) => a + b, 0) / finalScores.length;
 
     try {

@@ -202,6 +202,10 @@ export class StrokeAnimationRenderer {
       isAnimating: true,
     };
 
+    // 立即绘制第一帧，避免延迟
+    this.renderFrame();
+    if (this.onFrame) this.onFrame(this.getState());
+
     const totalStepsPerStroke = 12; // 每笔画的分步数
 
     this.animationTimer = setInterval(() => {

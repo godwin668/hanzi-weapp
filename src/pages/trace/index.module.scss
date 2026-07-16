@@ -16,6 +16,18 @@
   box-shadow: $shadow-float;
 }
 
+.topRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: $spacing-xs;
+}
+
+.prevNext {
+  display: flex;
+  gap: $spacing-sm;
+}
+
 .charInfo {
   display: flex;
   align-items: center;
@@ -141,13 +153,19 @@
 }
 
 .navBtn {
-  width: 80rpx;
-  height: $button-height-md;
+  width: 64rpx;
+  height: 56rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   background: $color-bg-hover;
-  border-radius: $radius-button;
-  font-size: $font-size-md;
+  border-radius: $radius-sm;
+  font-size: $font-size-lg;
   color: $color-text-secondary;
+  transition: all $transition-base;
+
+  &:active {
+    opacity: 0.7;
+    background: darken($color-bg-hover, 5%);
+  }
 }

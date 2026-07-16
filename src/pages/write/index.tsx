@@ -13,7 +13,6 @@ const WritePage: React.FC = () => {
   const { selectedCharacters, currentCharIndex, setCurrentCharIndex, nextChar, prevChar } = useAppStore();
   const [showHint, setShowHint] = useState(false);
   const [userStrokes, setUserStrokes] = useState<string[][]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
   const [animCurrentStroke, setAnimCurrentStroke] = useState(0);
   const canvasRef = useRef<any>(null);
   const ctxRef = useRef<any>(null);
@@ -21,6 +20,7 @@ const WritePage: React.FC = () => {
   const logicalSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const currentStrokeRef = useRef<string[]>([]);
   const animRendererRef = useRef<StrokeAnimationRenderer | null>(null);
+  const isDrawingRef = useRef(false);
 
   const currentChar = selectedCharacters[currentCharIndex];
 
@@ -39,13 +39,14 @@ const WritePage: React.FC = () => {
     };
   }, [currentCharIndex]);
 
-  const initCanvas = () => {
+  const initCanvas = (retryCount = 0) => {
+    const MAX_RETRY = 5;
     setTimeout(() => {
       const query = Taro.createSelectorQuery();
       query.select('#writeCanvas')
         .fields({ node: true, size: true, rect: true })
         .exec((res) => {
-          if (res[0]) {
+          if (res[0] && res[0].node) {
             const canvas = res[0].node;
             const ctx = canvas.getContext('2d');
             const dpr = Taro.getSystemInfoSync().pixelRatio;
@@ -67,16 +68,20 @@ const WritePage: React.FC = () => {
             ctx.strokeStyle = '#333333';
             ctxRef.current = ctx;
             canvasRef.current = canvas;
+            console.log('[WritePage] Canvas initialized successfully');
+          } else if (retryCount < MAX_RETRY) {
+            console.warn(`[WritePage] Canvas init retry ${retryCount + 1}/${MAX_RETRY}`);
+            initCanvas(retryCount + 1);
+          } else {
+            console.error('[WritePage] Canvas init failed after retries');
+            Taro.showToast({ title: '画布加载失败，请重试', icon: 'none' });
           }
         });
-    }, 300);
+    }, 100 + retryCount * 150);
   };
 
   const getCanvasPos = (touch: any) => {
-    const rect = canvasRectRef.current;
-    if (rect) {
-      return { x: touch.x - rect.left, y: touch.y - rect.top };
-    }
+    // Canvas 2D 中 touch.x/y 已相对于 Canvas 左上角，无需减去 rect
     return { x: touch.x, y: touch.y };
   };
 
@@ -84,7 +89,7 @@ const WritePage: React.FC = () => {
     if (showHint || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     currentStrokeRef.current = [];
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.beginPath();
@@ -92,23 +97,23 @@ const WritePage: React.FC = () => {
   }, [showHint]);
 
   const handleTouchMove = useCallback((e: any) => {
-    if (!isDrawing || !ctxRef.current) return;
+    if (!isDrawingRef.current || !ctxRef.current) return;
     const touch = e.touches[0];
     const pos = getCanvasPos(touch);
     currentStrokeRef.current.push(`${pos.x},${pos.y}`);
     ctxRef.current.lineTo(pos.x, pos.y);
     ctxRef.current.stroke();
-  }, [isDrawing]);
+  }, []);
 
   const handleTouchEnd = useCallback(() => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
     ctxRef.current?.closePath();
     if (currentStrokeRef.current.length > 1) {
       setUserStrokes(prev => [...prev, [...currentStrokeRef.current]]);
     }
     currentStrokeRef.current = [];
-  }, [isDrawing]);
+  }, []);
 
   const handleClear = () => {
     if (!ctxRef.current) return;
@@ -125,7 +130,11 @@ const WritePage: React.FC = () => {
 
   // 笔顺动画 - 使用真实 medians 数据
   const startAnimation = useCallback(() => {
-    if (!currentChar || !ctxRef.current) return;
+    if (!currentChar) return;
+    if (!ctxRef.current) {
+      Taro.showToast({ title: '画布尚未就绪，请稍候', icon: 'none' });
+      return;
+    }
 
     const strokeData = getStrokeData(currentChar.char);
     if (!strokeData || strokeData.medians.length === 0) {
@@ -136,8 +145,9 @@ const WritePage: React.FC = () => {
     const { w, h } = logicalSizeRef.current;
     const ctx = ctxRef.current;
 
-    // 清除用户笔迹
+    // 清除用户笔迹并绘制米字格
     ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, { canvasWidth: w, canvasHeight: h, margin: 20, gridSize: 1024 });
 
     const renderer = new StrokeAnimationRenderer(ctx, strokeData.medians, {
       canvasWidth: w,
@@ -245,9 +255,23 @@ const WritePage: React.FC = () => {
             <Text className={styles.charPinyin}>{currentChar.pinyin}</Text>
           </View>
         </View>
-        <Text className={styles.progress}>
-          {currentCharIndex + 1} / {selectedCharacters.length}
-        </Text>
+        <View className={styles.topRight}>
+          <View className={styles.prevNext}>
+            {currentCharIndex > 0 && (
+              <View className={styles.navBtn} onClick={prevChar}>
+                <Text>‹</Text>
+              </View>
+            )}
+            {currentCharIndex < selectedCharacters.length - 1 && (
+              <View className={styles.navBtn} onClick={nextChar}>
+                <Text>›</Text>
+              </View>
+            )}
+          </View>
+          <Text className={styles.progress}>
+            {currentCharIndex + 1} / {selectedCharacters.length}
+          </Text>
+        </View>
       </View>
 
       <View className={styles.canvasWrapper}>
@@ -286,18 +310,6 @@ const WritePage: React.FC = () => {
       )}
 
       <View className={styles.bottomBar}>
-        <View className={styles.prevNext}>
-          {currentCharIndex > 0 && (
-            <View className={styles.navBtn} onClick={prevChar}>
-              <Text>‹</Text>
-            </View>
-          )}
-          {currentCharIndex < selectedCharacters.length - 1 && (
-            <View className={styles.navBtn} onClick={nextChar}>
-              <Text>›</Text>
-            </View>
-          )}
-        </View>
         <View className={`${styles.actionBtn} ${styles.hintBtn}`} onClick={handleToggleHint}>
           <Text>{showHint ? '停止演示' : '笔顺演示'}</Text>
         </View>

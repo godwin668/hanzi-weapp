@@ -136,13 +136,13 @@ function drawMine(png, r, g, b) {
 
 const icons = {
   'home': { draw: drawHome, color: [153, 153, 153] },
-  'home-selected': { draw: drawHome, color: [79, 140, 255] },
+  'home-selected': { draw: drawHome, color: [71, 184, 129] },
   'practice': { draw: drawPractice, color: [153, 153, 153] },
-  'practice-selected': { draw: drawPractice, color: [79, 140, 255] },
+  'practice-selected': { draw: drawPractice, color: [71, 184, 129] },
   'history': { draw: drawHistory, color: [153, 153, 153] },
-  'history-selected': { draw: drawHistory, color: [79, 140, 255] },
+  'history-selected': { draw: drawHistory, color: [71, 184, 129] },
   'mine': { draw: drawMine, color: [153, 153, 153] },
-  'mine-selected': { draw: drawMine, color: [79, 140, 255] },
+  'mine-selected': { draw: drawMine, color: [71, 184, 129] },
 };
 
 for (const [name, config] of Object.entries(icons)) {
