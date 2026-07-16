@@ -21,6 +21,15 @@ const ResultPage: React.FC = () => {
 
   const scoreInfo = getScoreLevel(scoreNum);
 
+  const improvementTips = useMemo(() => {
+    const tips: string[] = [];
+    if (accuracyNum < 70) tips.push('注意笔画的起笔和收笔位置，多看示范动画');
+    if (aestheticsNum < 70) tips.push('控制好字形结构，横平竖直，注意各部分比例');
+    if (accuracyNum >= 70 && accuracyNum < 85) tips.push('笔画基本正确，再注意一下笔顺和连笔');
+    if (aestheticsNum >= 70 && aestheticsNum < 85) tips.push('结构大致合理，可以多注意笔画间距均匀');
+    return tips;
+  }, [accuracyNum, aestheticsNum]);
+
   const handleBack = () => {
     Taro.navigateBack();
   };
@@ -103,11 +112,23 @@ const ResultPage: React.FC = () => {
           </View>
           <View className={styles.compareItem}>
             <View className={classnames(styles.compareChar, styles.standardChar)}>
-              <Text>{char}</Text>
+              <View className={styles.tianGrid}>
+                <View className={styles.tianLineH} />
+                <View className={styles.tianLineV} />
+                <Text className={styles.standardCharText}>{char}</Text>
+              </View>
             </View>
             <Text className={styles.compareLabel}>标准字帖</Text>
           </View>
         </View>
+        {improvementTips.length > 0 && (
+          <View className={styles.improvement}>
+            <Text className={styles.improvementTitle}>改进建议</Text>
+            {improvementTips.map((tip, i) => (
+              <Text key={i} className={styles.improvementTip}>{i + 1}. {tip}</Text>
+            ))}
+          </View>
+        )}
       </View>
 
       <View className={styles.actions}>
